@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pitch Positions
 
-## Getting Started
+A web app that teaches young footballers where to move. Coaches build match situations; players
+drag their team to where it should go, live with the team or as homework, and see the coach's
+answer straight away. Monthly leaderboard per team.
 
-First, run the development server:
+Product decisions: [docs/PRODUCT.md](docs/PRODUCT.md). The original clickable prototype lives
+outside this repo (Google Drive, `Soccer_Positioning_Game/prototype/index.html`).
+
+## Stack
+
+- **Next.js 16** (App Router, TypeScript, Tailwind CSS 4). This version differs from older
+  Next.js; read the guides in `node_modules/next/dist/docs/` before changing framework code.
+- **Supabase**: Postgres database, logins, and live sync.
+- Hosting: **Vercel** (website) + **Supabase** (data).
+
+## Project layout
+
+| Path | What |
+|---|---|
+| `src/lib/pitch/` | Football logic shared by every screen: formats, situations, scoring |
+| `src/components/pitch/Pitch.tsx` | The pitch drawing (SVG), with dragging and tapping |
+| `src/lib/supabase/` | Database clients: as the signed-in user, or admin (server only) |
+| `supabase/migrations/` | Database tables and security rules |
+| `supabase/tests/rls.test.mjs` | Checks the security rules on an in-memory Postgres |
+
+## Running it on your Mac
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # then fill in the Supabase values
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Checks:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run typecheck
+npm run lint
+npm run test:db
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Setting up Supabase (once)
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Create a project at supabase.com.
+2. In the dashboard's **SQL Editor**, run `supabase/migrations/20261006000000_init.sql`.
+3. Copy the project URL, publishable key and secret key into `.env.local` (see `.env.example`).
