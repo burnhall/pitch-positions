@@ -30,7 +30,7 @@ export const requireCoach = cache(async (): Promise<Coach> => {
   return { id: user.id, email: user.email ?? "", displayName: data.display_name };
 });
 
-export type Player = { id: string; nickname: string; team: { id: string; name: string; format: string; joinCode: string } };
+export type Player = { id: string; nickname: string; team: { id: string; name: string; format: string; joinCode: string; timezone: string } };
 
 /** Signed-in player with their team, or a redirect to the player login. */
 export const requirePlayer = cache(async (): Promise<Player> => {
@@ -39,10 +39,10 @@ export const requirePlayer = cache(async (): Promise<Player> => {
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("players")
-    .select("id, nickname, teams (id, name, format, join_code)")
+    .select("id, nickname, teams (id, name, format, join_code, timezone)")
     .eq("user_id", user.id)
     .maybeSingle();
   if (!data) redirect("/coach");
-  const team = data.teams as unknown as { id: string; name: string; format: string; join_code: string };
-  return { id: data.id, nickname: data.nickname, team: { id: team.id, name: team.name, format: team.format, joinCode: team.join_code } };
+  const team = data.teams as unknown as { id: string; name: string; format: string; join_code: string; timezone: string };
+  return { id: data.id, nickname: data.nickname, team: { id: team.id, name: team.name, format: team.format, joinCode: team.join_code, timezone: team.timezone } };
 });

@@ -6,7 +6,9 @@ import { requireCoach } from "@/lib/auth";
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server";
 import { siteOrigin } from "@/lib/site";
 import { normalizeNickname } from "@/lib/players";
-import { isFormatId } from "@/lib/pitch/formats";
+import { FORMATS, isFormatId } from "@/lib/pitch/formats";
+import { defaultSetup } from "@/lib/pitch/situation";
+import { cleanKey, cleanSetup, missingFromKey } from "@/lib/pitch/validate";
 import { text, type FormState } from "@/lib/form";
 
 // ---------- coach account ----------
@@ -129,4 +131,101 @@ export async function removePlayer(fd: FormData) {
   const { data } = await supabase.from("players").delete().eq("id", playerId).select("user_id").maybeSingle();
   if (data?.user_id) await createSupabaseAdminClient().auth.admin.deleteUser(data.user_id);
   refresh();
+}
+
+// ---------- homework sets ----------
+
+/** New set in the team's format with one fresh situation, then open it in the editor. */
+export async function createSet(teamId: string) {
+  await requireCoach();
+  const supabase = await createSupabaseServerClient();
+  const { data: team } = await supabase.from("teams").select("format").eq("id", teamId).single();
+  if (!team || !isFormatId(team.format)) return;
+  const { data: set } = await supabase
+    .from("scenario_sets")
+    .insert({ team_id: teamId, name: "New homework", format: team.format })
+    .select("id")
+    .single();
+  if (!set) return;
+  const { data: sit } = await supabase
+    .from("situations")
+    .insert({ set_id: set.id, sort_order: 0, setup: defaultSetup(team.format) })
+    .select("id")
+    .single();
+  if (sit) await supabase.from("situation_keys").insert({ situation_id: sit.id });
+  redirect(`/coach/teams/${teamId}/sets/${set.id}`);
+}
+
+export type SaveSetInput = { name: string; situations: { id: string; setup: unknown; key: unknown }[] };
+
+/**
+ * Saves the whole set from the editor: name, situations in order, answer keys.
+ * Situations missing from the list are deleted (with any answers to them).
+ */
+export async function saveSet(setId: string, input: SaveSetInput): Promise<FormState> {
+  await requireCoach();
+  const supabase = await createSupabaseServerClient();
+  const { data: set } = await supabase.from("scenario_sets").select("id, format").eq("id", setId).maybeSingle();
+  if (!set || !isFormatId(set.format)) return { error: "This homework set no longer exists." };
+  const f = FORMATS[set.format];
+
+  const name = String(input.name ?? "").trim().slice(0, 80);
+  if (!name) return { error: "Give the homework set a name." };
+  const items = (Array.isArray(input.situations) ? input.situations : []).slice(0, 50);
+  if (!items.length) return { error: "A set needs at least one situation." };
+  if (items.some((s) => typeof s.id !== "string" || !/^[0-9a-f-]{36}$/i.test(s.id))) return { error: "Something went wrong. Reload and try again." };
+
+  const { error: nameError } = await supabase.from("scenario_sets").update({ name }).eq("id", setId);
+  if (nameError) return { error: "Couldn't save. Please try again." };
+
+  const keep = items.map((s) => s.id);
+  const { data: existing } = await supabase.from("situations").select("id").eq("set_id", setId);
+  const removed = (existing ?? []).map((s) => s.id).filter((id) => !keep.includes(id));
+  if (removed.length) await supabase.from("situations").delete().in("id", removed);
+
+  const { error: sitError } = await supabase
+    .from("situations")
+    .upsert(items.map((s, i) => ({ id: s.id, set_id: setId, sort_order: i, setup: cleanSetup(f, s.setup) })));
+  if (sitError) return { error: "Couldn't save the situations. Please try again." };
+  const { error: keyError } = await supabase
+    .from("situation_keys")
+    .upsert(items.map((s) => ({ situation_id: s.id, ...cleanKey(f, s.key) })));
+  if (keyError) return { error: "Couldn't save the answer keys. Please try again." };
+
+  refresh();
+  return { message: "Saved." };
+}
+
+/** Publishing makes the set visible to the team's players. Every player needs an answer first. */
+export async function setPublished(setId: string, published: boolean): Promise<FormState> {
+  await requireCoach();
+  const supabase = await createSupabaseServerClient();
+  if (published) {
+    const { data: set } = await supabase
+      .from("scenario_sets")
+      .select("format, situations (sort_order, situation_keys (model, note))")
+      .eq("id", setId)
+      .maybeSingle();
+    if (!set || !isFormatId(set.format)) return { error: "This homework set no longer exists." };
+    const f = FORMATS[set.format];
+    const sits = ((set.situations ?? []) as { sort_order: number; situation_keys: unknown }[]).sort((a, b) => a.sort_order - b.sort_order);
+    if (!sits.length) return { error: "Add at least one situation first." };
+    const incomplete = sits
+      .map((s, i) => ({ n: i + 1, missing: missingFromKey(f, cleanKey(f, Array.isArray(s.situation_keys) ? s.situation_keys[0] : s.situation_keys)) }))
+      .filter((s) => s.missing.length);
+    if (incomplete.length) {
+      return { error: `Finish the answer key first: ${incomplete.map((s) => `situation ${s.n} (${s.missing.join(", ")})`).join("; ")}.` };
+    }
+  }
+  const { error } = await supabase.from("scenario_sets").update({ published }).eq("id", setId);
+  if (error) return { error: "Couldn't update. Please try again." };
+  refresh();
+  return { message: published ? "Published: your players can see it now." : "Hidden from players." };
+}
+
+export async function deleteSet(teamId: string, setId: string) {
+  await requireCoach();
+  const supabase = await createSupabaseServerClient();
+  await supabase.from("scenario_sets").delete().eq("id", setId);
+  redirect(`/coach/teams/${teamId}`);
 }

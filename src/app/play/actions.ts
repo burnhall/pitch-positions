@@ -7,6 +7,11 @@ import {
   LOCK_MINUTES, MAX_PIN_FAILURES, PIN_LENGTH, isValidPin, normalizeJoinCode, normalizeNickname, pinPassword, playerEmail,
 } from "@/lib/players";
 import { text, type FormState } from "@/lib/form";
+import { requirePlayer } from "@/lib/auth";
+import { FORMATS, isFormatId } from "@/lib/pitch/formats";
+import { scoreSituation } from "@/lib/pitch/scoring";
+import type { SituationKey, TeamPositions } from "@/lib/pitch/situation";
+import { cleanKey, cleanPositions, cleanSetup } from "@/lib/pitch/validate";
 
 /** A kid opens their invite link and picks a PIN. Creates their login (or resets the PIN) and signs them in. */
 export async function claimInvite(token: string, _: FormState, fd: FormData): Promise<FormState> {
@@ -86,4 +91,42 @@ export async function playerSignOut() {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
   redirect("/play/login");
+}
+
+export type AnswerResult =
+  | { error: string }
+  | { points: number; maxPoints: number; positions: TeamPositions; key: SituationKey };
+
+/**
+ * Scores a player's whole-team answer on the server and records it. One answer per
+ * situation: a second attempt gets the first result back instead.
+ */
+export async function submitAnswer(situationId: string, positions: unknown): Promise<AnswerResult> {
+  const player = await requirePlayer();
+  const supabase = await createSupabaseServerClient();
+  // Security rules only show situations from published sets on the player's own team
+  const { data: sit } = await supabase.from("situations").select("id, setup, scenario_sets (format)").eq("id", situationId).maybeSingle();
+  const format = (sit?.scenario_sets as unknown as { format: string } | null)?.format;
+  if (!sit || !isFormatId(format)) return { error: "This situation isn't available any more." };
+  const f = FORMATS[format];
+
+  // The answer key is hidden from players until they've answered, so read it as admin
+  const admin = createSupabaseAdminClient();
+  const { data: keyRow } = await admin.from("situation_keys").select("model, note").eq("situation_id", situationId).maybeSingle();
+  const setup = cleanSetup(f, sit.setup);
+  const key = cleanKey(f, keyRow);
+  const answer = { ...setup.start, ...cleanPositions(f, positions) };
+  const score = scoreSituation(f, setup, key, answer);
+
+  const { error } = await admin.from("answers").insert({
+    situation_id: situationId, player_id: player.id, positions: answer, points: score.points, max_points: score.maxPoints,
+  });
+  if (error) {
+    if (error.code !== "23505") return { error: "Couldn't save your answer. Please try again." };
+    // Already answered (e.g. double tap or a second device): show the original result
+    const { data: first } = await admin.from("answers").select("positions, points, max_points")
+      .eq("situation_id", situationId).eq("player_id", player.id).single();
+    return { points: first!.points, maxPoints: first!.max_points, positions: cleanPositions(f, first!.positions), key };
+  }
+  return { points: score.points, maxPoints: score.maxPoints, positions: answer, key };
 }
