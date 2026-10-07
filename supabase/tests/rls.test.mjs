@@ -1,15 +1,18 @@
 // Runs the Pitch Positions migration on PGlite with a minimal stand-in for Supabase's
 // auth schema and roles, then checks the security rules from each user's point of view.
 import { PGlite } from "@electric-sql/pglite";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const db = new PGlite();
-const migration = readFileSync(process.argv[2], "utf8");
+// All migrations in the given folder, applied in file-name order like Supabase does
+const dir = process.argv[2];
+const migrations = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort().map((f) => readFileSync(join(dir, f), "utf8"));
 
 await db.exec(`
   create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
   create schema auth;
-  create table auth.users (id uuid primary key, raw_app_meta_data jsonb default '{}', raw_user_meta_data jsonb default '{}');
+  create table auth.users (id uuid primary key, email text, raw_app_meta_data jsonb default '{}', raw_user_meta_data jsonb default '{}');
   create function auth.uid() returns uuid language sql stable as $$
     select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   grant usage on schema public, auth to anon, authenticated, service_role;
@@ -17,14 +20,15 @@ await db.exec(`
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 `);
-await db.exec(migration);
+for (const m of migrations) await db.exec(m);
 
 const ids = { coachA: "a0000000-0000-0000-0000-00000000000a", coachB: "b0000000-0000-0000-0000-00000000000b",
   kid1: "c0000000-0000-0000-0000-000000000001", kid2: "c0000000-0000-0000-0000-000000000002" };
 await db.exec(`insert into auth.users (id, raw_user_meta_data) values
   ('${ids.coachA}', '{"display_name":"Coach A"}'), ('${ids.coachB}', '{}');
-  insert into auth.users (id, raw_app_meta_data) values
-  ('${ids.kid1}', '{"role":"player"}'), ('${ids.kid2}', '{"role":"player"}');`);
+  insert into auth.users (id, email) values
+  ('${ids.kid1}', 'p-1@players.invalid'), ('${ids.kid2}', 'p-2@players.invalid');
+  update auth.users set raw_app_meta_data = '{"role":"player"}' where email like '%@players.invalid';`);
 
 let pass = 0, fail = 0;
 const check = (name, ok, extra = "") => { if (ok) pass++; else fail++; console.log(`${ok ? "PASS" : "FAIL"}  ${name}${extra ? "  — " + extra : ""}`); };

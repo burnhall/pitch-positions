@@ -1,3 +1,4 @@
+import { ButtonLink } from "@/components/ui";
 import { PitchDemo } from "@/components/pitch/PitchDemo";
 
 export default function Home() {
@@ -10,12 +11,8 @@ export default function Home() {
       </p>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <span className="rounded-lg bg-accent px-4 py-2.5 font-semibold text-accent-ink opacity-60" aria-disabled="true">
-          Coach sign in (coming next)
-        </span>
-        <span className="rounded-lg border border-line bg-chip px-4 py-2.5 font-semibold opacity-60" aria-disabled="true">
-          Player login (coming next)
-        </span>
+        <ButtonLink href="/play/login" variant="primary" className="px-5 py-2.5">Player login</ButtonLink>
+        <ButtonLink href="/coach" className="px-5 py-2.5">Coach</ButtonLink>
       </div>
 
       <section className="mt-10">

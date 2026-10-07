@@ -2,6 +2,7 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 import { supabaseUrl, supabasePublishableKey } from "./env";
 
 /**
@@ -9,6 +10,9 @@ import { supabaseUrl, supabasePublishableKey } from "./env";
  * Server Actions and Route Handlers. Row Level Security decides what they can see.
  */
 export async function createSupabaseServerClient() {
+  // Supabase checks token expiry against the clock, which Next.js may not do while
+  // prerendering, so anything using the user's session waits for a real request.
+  await connection();
   const cookieStore = await cookies();
   return createServerClient(supabaseUrl(), supabasePublishableKey(), {
     cookies: {

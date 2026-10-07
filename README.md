@@ -43,5 +43,21 @@ npm run test:db
 ## Setting up Supabase (once)
 
 1. Create a project at supabase.com.
-2. In the dashboard's **SQL Editor**, run `supabase/migrations/20261006000000_init.sql`.
+2. In the dashboard's **SQL Editor**, run each file in `supabase/migrations/` in name order.
+   When a new migration file is added later, run just that one.
 3. Copy the project URL, publishable key and secret key into `.env.local` (see `.env.example`).
+4. **Authentication → URL Configuration**: Site URL is where coaches land after confirming their
+   email (`http://localhost:3000` while developing, the real address once deployed).
+5. Supabase's built-in email sender only delivers to members of your Supabase organisation and
+   only a few emails an hour. Before other coaches sign up, either connect your own email
+   service (Authentication → Emails → SMTP settings) or turn off "Confirm email".
+
+## How logins work
+
+- **Coaches**: email + password through Supabase Auth.
+- **Players**: no email. The coach adds a nickname; the kid opens a one-time invite link (or
+  QR card), picks a 4-digit PIN and is signed in. On a new device they log in with team code +
+  nickname + PIN. Behind the scenes each player has an internal login
+  (`p-<player id>@players.invalid`) whose password is derived from the PIN with
+  `PLAYER_PIN_PEPPER`, so PINs are never stored. 5 wrong PINs lock the player out for 15
+  minutes; a new invite from the coach resets the PIN and clears the lock.
