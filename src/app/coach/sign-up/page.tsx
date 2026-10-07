@@ -7,7 +7,7 @@ export default function CoachSignUpPage() {
   return (
     <PageShell narrow>
       <h1 className="mb-1 text-2xl font-bold">Create a coach account</h1>
-      <p className="mb-4 text-muted">Set up your team, then invite your players.</p>
+      <p className="mb-4 text-muted">For our club&apos;s coaches: your club admin needs to approve your email address first.</p>
       <Card>
         <SignUpForm />
       </Card>

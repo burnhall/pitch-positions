@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
-import { requireCoach } from "@/lib/auth";
+import { requireAdmin, requireCoach } from "@/lib/auth";
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server";
 import { siteOrigin } from "@/lib/site";
 import { normalizeNickname } from "@/lib/players";
@@ -13,6 +13,17 @@ import { text, type FormState } from "@/lib/form";
 
 // ---------- coach account ----------
 
+const NOT_APPROVED = "Sign-up is for our club's coaches only. Ask the club admin to add your email address first.";
+
+/** Only emails the club admin approved may sign up (the first coach of a fresh install excepted). */
+async function mayCoachSignUp(email: string) {
+  const admin = createSupabaseAdminClient();
+  const { count } = await admin.from("coaches").select("*", { count: "exact", head: true });
+  if (!count) return true;
+  const { data } = await admin.from("approved_coach_emails").select("email").eq("email", email).maybeSingle();
+  return !!data;
+}
+
 export async function signUpCoach(_: FormState, fd: FormData): Promise<FormState> {
   const name = text(fd, "name");
   const email = text(fd, "email").toLowerCase();
@@ -21,6 +32,7 @@ export async function signUpCoach(_: FormState, fd: FormData): Promise<FormState
   if (!/^\S+@\S+\.\S+$/.test(email)) return { error: "Please enter a valid email address." };
   if (password.length < 8) return { error: "Choose a password of at least 8 characters." };
   if (email.endsWith("@players.invalid")) return { error: "Please use your own email address." };
+  if (!(await mayCoachSignUp(email))) return { error: NOT_APPROVED };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp({
@@ -28,7 +40,8 @@ export async function signUpCoach(_: FormState, fd: FormData): Promise<FormState
     password,
     options: { data: { display_name: name }, emailRedirectTo: `${await siteOrigin()}/auth/confirm` },
   });
-  if (error) return { error: error.message };
+  // The database also refuses unapproved emails, in case the list changed meanwhile
+  if (error) return { error: /database error/i.test(error.message) ? NOT_APPROVED : error.message };
   // With email confirmation off, Supabase signs the coach straight in
   if (data.session) redirect("/coach");
   return { message: `Almost done! We sent a confirmation link to ${email}. Open it to finish signing up.` };
@@ -228,4 +241,28 @@ export async function deleteSet(teamId: string, setId: string) {
   const supabase = await createSupabaseServerClient();
   await supabase.from("scenario_sets").delete().eq("id", setId);
   redirect(`/coach/teams/${teamId}`);
+}
+
+// ---------- club admin ----------
+
+/** Approves coach emails (one per line or comma-separated) so those people can sign up. */
+export async function approveCoachEmails(_: FormState, fd: FormData): Promise<FormState> {
+  await requireAdmin();
+  const emails = [...new Set(String(fd.get("emails") ?? "").split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  if (!emails.length) return { error: "Type at least one email address." };
+  const bad = emails.find((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.endsWith("@players.invalid"));
+  if (bad) return { error: `"${bad}" doesn't look like an email address.` };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("approved_coach_emails").upsert(emails.map((email) => ({ email })), { onConflict: "email", ignoreDuplicates: true });
+  if (error) return { error: "Couldn't save. Please try again." };
+  refresh();
+  return { message: `Approved ${emails.length} email${emails.length > 1 ? "s" : ""}. Those coaches can now sign up at /coach/sign-up.` };
+}
+
+export async function removeApprovedEmail(fd: FormData) {
+  await requireAdmin();
+  const supabase = await createSupabaseServerClient();
+  await supabase.from("approved_coach_emails").delete().eq("email", text(fd, "email"));
+  refresh();
 }

@@ -24,8 +24,10 @@ for (const m of migrations) await db.exec(m);
 
 const ids = { coachA: "a0000000-0000-0000-0000-00000000000a", coachB: "b0000000-0000-0000-0000-00000000000b",
   kid1: "c0000000-0000-0000-0000-000000000001", kid2: "c0000000-0000-0000-0000-000000000002" };
-await db.exec(`insert into auth.users (id, raw_user_meta_data) values
-  ('${ids.coachA}', '{"display_name":"Coach A"}'), ('${ids.coachB}', '{}');
+// Coach A is the first sign-up (becomes admin); coach B's email is approved before signing up
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('${ids.coachA}', 'a@club.test', '{"display_name":"Coach A"}');
+  insert into public.approved_coach_emails (email) values ('b@club.test');
+  insert into auth.users (id, email) values ('${ids.coachB}', 'B@Club.test');
   insert into auth.users (id, email) values
   ('${ids.kid1}', 'p-1@players.invalid'), ('${ids.kid2}', 'p-2@players.invalid');
   update auth.users set raw_app_meta_data = '{"role":"player"}' where email like '%@players.invalid';`);
@@ -52,6 +54,20 @@ async function as(user, sql, params = []) {
 
 const coaches = await as(null, "select id, display_name from public.coaches order by id");
 check("sign-up creates coach rows only for coaches", coaches.rows.length === 2 && coaches.rows[0].display_name === "Coach A");
+
+// Club-only sign-up
+const admins = await as(null, "select id from public.coaches where is_admin");
+check("first coach becomes the club admin, later ones don't", admins.rows.length === 1 && admins.rows[0].id === ids.coachA);
+check("unapproved email can't sign up", !!(await as(null, "insert into auth.users (id, email) values (gen_random_uuid(), 'stranger@example.com')")).error);
+check("coach can't make themselves admin", !!(await as("coachB", "update public.coaches set is_admin = true where id = $1", [ids.coachB])).error);
+check("coach can still rename themselves", !(await as("coachB", "update public.coaches set display_name = 'Bee' where id = $1", [ids.coachB])).error);
+check("non-admin can't see the approved list", (await as("coachB", "select * from public.approved_coach_emails")).rows.length === 0);
+check("non-admin can't approve emails", !!(await as("coachB", "insert into public.approved_coach_emails (email) values ('friend@club.test')")).error);
+check("admin sees the approved list", (await as("coachA", "select * from public.approved_coach_emails")).rows.length === 1);
+check("admin approves an email", !(await as("coachA", "insert into public.approved_coach_emails (email) values ('c@club.test')")).error);
+check("approved email can then sign up", !(await as(null, "insert into auth.users (id, email) values (gen_random_uuid(), 'c@club.test')")).error);
+check("admin sees every coach", (await as("coachA", "select * from public.coaches")).rows.length === 3);
+check("other coaches only see themselves", (await as("coachB", "select * from public.coaches")).rows.length === 1);
 
 const team = await as("coachA", "insert into public.teams (name, format) values ('U10 Blue', '7v7') returning *");
 check("coach creates a team", team.rows?.length === 1, team.error);

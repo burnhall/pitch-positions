@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useSyncExternalStore } from "react";
 import { Field, FormMessage, Input, SubmitButton, inputClass } from "@/components/ui";
 import { FORMAT_IDS } from "@/lib/pitch/formats";
-import { addPlayers, createTeam, signInCoach, signUpCoach } from "./actions";
+import { addPlayers, approveCoachEmails, createTeam, signInCoach, signUpCoach } from "./actions";
 
 export function SignUpForm() {
   const [state, action] = useActionState(signUpCoach, null);
@@ -78,6 +78,21 @@ export function AddPlayersForm({ teamId }: { teamId: string }) {
         <textarea name="nicknames" rows={4} className={inputClass} placeholder={"Sara\nLeo\nMaya"} />
       </Field>
       <SubmitButton variant="primary" pending="Adding…">Add players</SubmitButton>
+    </form>
+  );
+}
+
+export function ApproveEmailsForm() {
+  const [state, action] = useActionState(approveCoachEmails, null);
+  const form = useRef<HTMLFormElement>(null);
+  useEffect(() => { if (state?.message) form.current?.reset(); }, [state]);
+  return (
+    <form action={action} ref={form}>
+      <FormMessage state={state} />
+      <Field label="Coach emails, one per line" hint="They can then create their own account at the coach sign-up page.">
+        <textarea name="emails" rows={3} className={inputClass} placeholder={"coach.one@example.com\ncoach.two@example.com"} />
+      </Field>
+      <SubmitButton variant="primary" pending="Saving…">Approve</SubmitButton>
     </form>
   );
 }

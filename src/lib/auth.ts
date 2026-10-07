@@ -17,7 +17,7 @@ export const getUser = cache(async () => {
 /** Player logins are never coaches, whatever the database says. */
 const isPlayerLogin = (user: User) => !!user.email?.endsWith("@players.invalid") || user.app_metadata.role === "player";
 
-export type Coach ={ id: string; email: string; displayName: string };
+export type Coach = { id: string; email: string; displayName: string; isAdmin: boolean };
 
 /** Signed-in coach, or a redirect: to sign-in if signed out, to /play if this is a player. */
 export const requireCoach = cache(async (): Promise<Coach> => {
@@ -25,9 +25,16 @@ export const requireCoach = cache(async (): Promise<Coach> => {
   if (!user) redirect("/coach/sign-in");
   if (isPlayerLogin(user)) redirect("/play");
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.from("coaches").select("display_name").eq("id", user.id).maybeSingle();
+  const { data } = await supabase.from("coaches").select("display_name, is_admin").eq("id", user.id).maybeSingle();
   if (!data) redirect("/play");
-  return { id: user.id, email: user.email ?? "", displayName: data.display_name };
+  return { id: user.id, email: user.email ?? "", displayName: data.display_name, isAdmin: data.is_admin };
+});
+
+/** Signed-in club admin (manages which emails may sign up as coaches). */
+export const requireAdmin = cache(async (): Promise<Coach> => {
+  const coach = await requireCoach();
+  if (!coach.isAdmin) redirect("/coach");
+  return coach;
 });
 
 export type Player = { id: string; nickname: string; team: { id: string; name: string; format: string; joinCode: string; timezone: string } };

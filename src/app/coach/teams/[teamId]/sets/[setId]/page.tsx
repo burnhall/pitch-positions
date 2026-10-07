@@ -70,6 +70,10 @@ async function SetContent({ params }: { params: Promise<{ teamId: string; setId:
         {kids.length === 0 ? (
           <p className="text-muted">{set.published ? "Nobody has started this set yet." : "Publish the set so your players can start."}</p>
         ) : (
+          <>
+          <Link href={`/coach/teams/${teamId}/sets/${setId}/review`} className="mb-3 inline-block rounded-lg border border-accent bg-accent px-3.5 py-2 font-semibold text-accent-ink">
+            Review answers on the pitch ▶
+          </Link>
           <table className="w-full text-sm">
             <thead><tr className="text-left text-muted"><th className="py-1.5 font-normal">Player</th><th className="font-normal">Situations</th><th className="text-right font-normal">Accuracy</th><th className="text-right font-normal">Points</th></tr></thead>
             <tbody>
@@ -83,6 +87,7 @@ async function SetContent({ params }: { params: Promise<{ teamId: string; setId:
               ))}
             </tbody>
           </table>
+          </>
         )}
       </Card>
     </>
