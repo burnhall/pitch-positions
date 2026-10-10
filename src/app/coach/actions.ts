@@ -146,6 +146,27 @@ export async function removePlayer(fd: FormData) {
   refresh();
 }
 
+/**
+ * Deletes a team and everything in it (players, invites, homework, answers), plus the
+ * players' logins. The coach must type the team name to confirm.
+ */
+export async function deleteTeam(teamId: string, _: FormState, fd: FormData): Promise<FormState> {
+  await requireCoach();
+  const supabase = await createSupabaseServerClient();
+  const { data: team } = await supabase.from("teams").select("name").eq("id", teamId).maybeSingle();
+  if (!team) return { error: "This team no longer exists." };
+  if (text(fd, "confirm").toLowerCase() !== team.name.trim().toLowerCase()) return { error: "Type the team name exactly to confirm." };
+
+  // Collect the players' logins first: deleting the team removes the player rows
+  const { data: players } = await supabase.from("players").select("user_id").eq("team_id", teamId);
+  // The security rules only let a coach delete their own teams
+  const { data: deleted } = await supabase.from("teams").delete().eq("id", teamId).select("id").maybeSingle();
+  if (!deleted) return { error: "Couldn't delete the team. Please try again." };
+  const admin = createSupabaseAdminClient();
+  for (const p of players ?? []) if (p.user_id) await admin.auth.admin.deleteUser(p.user_id);
+  redirect("/coach");
+}
+
 // ---------- homework sets ----------
 
 /** New set in the team's format with one fresh situation, then open it in the editor. */

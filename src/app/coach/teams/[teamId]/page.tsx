@@ -7,7 +7,7 @@ import { Leaderboard } from "@/components/Leaderboard";
 import { inviteUrl, qrSvg } from "@/lib/invites";
 import { siteOrigin } from "@/lib/site";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { AddPlayersForm } from "../../forms";
+import { AddPlayersForm, DeleteTeamForm } from "../../forms";
 import { loadTeam } from "./data";
 import { CoachMenu } from "../../CoachMenu";
 import { createSet, newInvite, removePlayer } from "../../actions";
@@ -129,6 +129,12 @@ async function Team({ params }: { params: Promise<{ teamId: string }> }) {
             <AddPlayersForm teamId={team.id} />
           </Card>
           <Leaderboard teamId={team.id} timezone={team.timezone} />
+          <details className="rounded-xl border border-line bg-panel p-4">
+            <summary className="cursor-pointer text-sm text-bad">Delete this team</summary>
+            <div className="mt-3">
+              <DeleteTeamForm teamId={team.id} teamName={team.name} players={players.length} sets={sets?.length ?? 0} />
+            </div>
+          </details>
         </div>
       </div>
     </>

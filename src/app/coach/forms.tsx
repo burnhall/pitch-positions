@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Field, FormMessage, Input, SubmitButton, inputClass } from "@/components/ui";
 import { FORMAT_IDS } from "@/lib/pitch/formats";
-import { addPlayers, approveCoachEmails, changePassword, createTeam, resetCoachPassword, signInCoach, signUpCoach } from "./actions";
+import { addPlayers, approveCoachEmails, changePassword, createTeam, deleteTeam, resetCoachPassword, signInCoach, signUpCoach } from "./actions";
 
 export function SignUpForm() {
   const [state, action] = useActionState(signUpCoach, null);
@@ -138,6 +138,23 @@ export function ChangePasswordForm({ required }: { required: boolean }) {
         <Input name="password2" type="password" autoComplete="new-password" required minLength={8} />
       </Field>
       <SubmitButton variant="primary" pending="Saving…">{required ? "Save and continue" : "Change password"}</SubmitButton>
+    </form>
+  );
+}
+
+export function DeleteTeamForm({ teamId, teamName, players, sets }: { teamId: string; teamName: string; players: number; sets: number }) {
+  const [state, action] = useActionState(deleteTeam.bind(null, teamId), null);
+  return (
+    <form action={action}>
+      <FormMessage state={state} />
+      <p className="mb-3 text-sm text-muted">
+        Deletes <b className="text-ink">{teamName}</b> for good: its {players} player{players === 1 ? "" : "s"} and their logins,
+        {" "}{sets} homework set{sets === 1 ? "" : "s"}, and all answers and points. This can&apos;t be undone.
+      </p>
+      <Field label={`Type "${teamName}" to confirm`}>
+        <Input name="confirm" autoComplete="off" required />
+      </Field>
+      <SubmitButton variant="danger" pending="Deleting…">Delete team</SubmitButton>
     </form>
   );
 }
