@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/auth";
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server";
 import { CoachMenu } from "../CoachMenu";
 import { removeApprovedEmail } from "../actions";
-import { ApproveEmailsForm } from "../forms";
+import { ApproveEmailsForm, ResetPasswordButton } from "../forms";
 
 export default function ClubAdminPage() {
   return (
@@ -24,7 +24,7 @@ export default function ClubAdminPage() {
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 async function Coaches() {
-  await requireAdmin();
+  const me = await requireAdmin();
   const supabase = await createSupabaseServerClient();
   const admin = createSupabaseAdminClient();
   const [{ data: coaches }, { data: approved }, { data: users }, { data: teams }] = await Promise.all([
@@ -58,6 +58,7 @@ async function Coaches() {
                   <span className="font-semibold">{c.display_name || "–"}</span>
                   {c.is_admin && <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">Admin</span>}
                   <span className="block text-muted">{emailOf.get(c.id)}</span>
+                  {c.id !== me.id && <ResetPasswordButton coachId={c.id} name={c.display_name || emailOf.get(c.id) || "this coach"} />}
                 </td>
                 <td className="py-2">{teamsOf(c.id) || <span className="text-muted">none</span>}</td>
                 <td className="py-2 text-right text-muted">{day(c.created_at)}</td>

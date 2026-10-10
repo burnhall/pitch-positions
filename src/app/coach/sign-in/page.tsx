@@ -15,6 +15,8 @@ export default function CoachSignInPage(props: PageProps<"/coach/sign-in">) {
         <SignInForm />
       </Card>
       <p className="mt-4 text-sm text-muted">
+        Forgot your password? Ask your club admin: they can give you a temporary one.
+        <br />
         New coach? <Link href="/coach/sign-up" className="text-accent underline">Create an account</Link>
         <br />
         Are you a player? <Link href="/play/login" className="text-accent underline">Player login</Link>

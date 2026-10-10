@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
-import { requireAdmin, requireCoach } from "@/lib/auth";
+import { requireAdmin, requireCoach, requireCoachAccount } from "@/lib/auth";
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server";
 import { siteOrigin } from "@/lib/site";
 import { normalizeNickname } from "@/lib/players";
@@ -257,4 +257,54 @@ export async function removeApprovedEmail(fd: FormData) {
   const supabase = await createSupabaseServerClient();
   await supabase.from("approved_coach_emails").delete().eq("email", text(fd, "email"));
   refresh();
+}
+
+// ---------- passwords ----------
+
+/** Readable one-time password without look-alike characters, e.g. "KQ7M-X3PA-9TRW". */
+function temporaryPassword() {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  const s = [...bytes].map((b) => chars[b % chars.length]).join("");
+  return `${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8)}`;
+}
+
+export type ResetState = { error?: string; password?: string } | null;
+
+/** Club admin gives a coach a temporary password; the coach must replace it at next sign-in. */
+export async function resetCoachPassword(coachId: string): Promise<ResetState> {
+  const me = await requireAdmin();
+  if (coachId === me.id) return { error: "Change your own password on your Account page." };
+  const supabase = await createSupabaseServerClient();
+  // The admin may read every coach profile; this also stops it being used on player logins
+  const { data: coach } = await supabase.from("coaches").select("id").eq("id", coachId).maybeSingle();
+  if (!coach) return { error: "That coach no longer exists." };
+  const password = temporaryPassword();
+  const { error } = await createSupabaseAdminClient().auth.admin.updateUserById(coachId, {
+    password,
+    app_metadata: { must_change_password: true },
+  });
+  if (error) return { error: "Couldn't reset the password. Please try again." };
+  return { password };
+}
+
+export type ChangePasswordState = (FormState & { next?: string }) | null;
+
+/** A coach sets a new password (required after an admin reset). */
+export async function changePassword(_: ChangePasswordState, fd: FormData): Promise<ChangePasswordState> {
+  const coach = await requireCoachAccount();
+  const password = String(fd.get("password") ?? "");
+  if (password.length < 8) return { error: "Choose a password of at least 8 characters." };
+  if (password !== String(fd.get("password2") ?? "")) return { error: "The two passwords don't match." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: /different from the old/i.test(error.message) ? "Choose a password different from the old one." : "Couldn't change the password. Please try again." };
+  if (coach.mustChangePassword) {
+    await createSupabaseAdminClient().auth.admin.updateUserById(coach.id, { app_metadata: { must_change_password: false } });
+    // The browser moves on itself: a redirect from here would render the next page in this
+    // same request, which still remembers the old "must change password" answer.
+    return { message: "Password changed.", next: "/coach" };
+  }
+  return { message: "Password changed." };
 }
