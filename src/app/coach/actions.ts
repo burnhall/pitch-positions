@@ -8,7 +8,7 @@ import { siteOrigin } from "@/lib/site";
 import { normalizeNickname } from "@/lib/players";
 import { FORMATS, isFormatId } from "@/lib/pitch/formats";
 import { defaultSetup } from "@/lib/pitch/situation";
-import { cleanKey, cleanSetup, missingFromKey } from "@/lib/pitch/validate";
+import { cleanKey, cleanSetup, completeKey } from "@/lib/pitch/validate";
 import { text, type FormState } from "@/lib/form";
 
 // ---------- coach account ----------
@@ -196,39 +196,31 @@ export async function saveSet(setId: string, input: SaveSetInput): Promise<FormS
   const removed = (existing ?? []).map((s) => s.id).filter((id) => !keep.includes(id));
   if (removed.length) await supabase.from("situations").delete().in("id", removed);
 
+  const clean = items.map((s) => {
+    const setup = cleanSetup(f, s.setup);
+    // players the coach didn't move in the answer key are expected to stay put
+    return { id: s.id, setup, key: completeKey(f, setup, cleanKey(f, s.key)) };
+  });
   const { error: sitError } = await supabase
     .from("situations")
-    .upsert(items.map((s, i) => ({ id: s.id, set_id: setId, sort_order: i, setup: cleanSetup(f, s.setup) })));
+    .upsert(clean.map((s, i) => ({ id: s.id, set_id: setId, sort_order: i, setup: s.setup })));
   if (sitError) return { error: "Couldn't save the situations. Please try again." };
   const { error: keyError } = await supabase
     .from("situation_keys")
-    .upsert(items.map((s) => ({ situation_id: s.id, ...cleanKey(f, s.key) })));
+    .upsert(clean.map((s) => ({ situation_id: s.id, ...s.key })));
   if (keyError) return { error: "Couldn't save the answer keys. Please try again." };
 
   refresh();
   return { message: "Saved." };
 }
 
-/** Publishing makes the set visible to the team's players. Every player needs an answer first. */
+/** Publishing makes the set visible to the team's players. */
 export async function setPublished(setId: string, published: boolean): Promise<FormState> {
   await requireCoach();
   const supabase = await createSupabaseServerClient();
   if (published) {
-    const { data: set } = await supabase
-      .from("scenario_sets")
-      .select("format, situations (sort_order, situation_keys (model, note))")
-      .eq("id", setId)
-      .maybeSingle();
-    if (!set || !isFormatId(set.format)) return { error: "This homework set no longer exists." };
-    const f = FORMATS[set.format];
-    const sits = ((set.situations ?? []) as { sort_order: number; situation_keys: unknown }[]).sort((a, b) => a.sort_order - b.sort_order);
-    if (!sits.length) return { error: "Add at least one situation first." };
-    const incomplete = sits
-      .map((s, i) => ({ n: i + 1, missing: missingFromKey(f, cleanKey(f, Array.isArray(s.situation_keys) ? s.situation_keys[0] : s.situation_keys)) }))
-      .filter((s) => s.missing.length);
-    if (incomplete.length) {
-      return { error: `Finish the answer key first: ${incomplete.map((s) => `situation ${s.n} (${s.missing.join(", ")})`).join("; ")}.` };
-    }
+    const { count } = await supabase.from("situations").select("*", { count: "exact", head: true }).eq("set_id", setId);
+    if (!count) return { error: "Add at least one situation first." };
   }
   const { error } = await supabase.from("scenario_sets").update({ published }).eq("id", setId);
   if (error) return { error: "Couldn't update. Please try again." };

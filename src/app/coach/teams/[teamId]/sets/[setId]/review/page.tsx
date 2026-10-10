@@ -5,7 +5,7 @@ import { Loading, PageShell } from "@/components/PageShell";
 import { requireCoach } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { FORMATS, isFormatId } from "@/lib/pitch/formats";
-import { cleanKey, cleanPositions, cleanSetup } from "@/lib/pitch/validate";
+import { cleanKey, cleanPositions, cleanSetup, completeKey } from "@/lib/pitch/validate";
 import type { Situation } from "@/lib/pitch/situation";
 import { CoachMenu } from "../../../../../CoachMenu";
 import { ReviewBoard, type ReviewAnswer } from "./ReviewBoard";
@@ -38,7 +38,10 @@ async function Review({ params }: { params: Promise<{ teamId: string; setId: str
 
   const situations: Situation[] = ((set.situations ?? []) as SitRow[])
     .sort((a, b) => a.sort_order - b.sort_order)
-    .map((s) => ({ id: s.id, setup: cleanSetup(f, s.setup), key: cleanKey(f, Array.isArray(s.situation_keys) ? s.situation_keys[0] : s.situation_keys) }));
+    .map((s) => {
+      const setup = cleanSetup(f, s.setup);
+      return { id: s.id, setup, key: completeKey(f, setup, cleanKey(f, Array.isArray(s.situation_keys) ? s.situation_keys[0] : s.situation_keys)) };
+    });
   if (!situations.length) notFound();
 
   const { data } = await supabase

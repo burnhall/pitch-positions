@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Pitch, type PitchArrow, type PitchBall, type PitchToken, type PitchZone } from "@/components/pitch/Pitch";
 import { Button, Card, FormMessage, inputClass } from "@/components/ui";
-import { FORMATS, clamp01, type FormatId, type Point } from "@/lib/pitch/formats";
+import { FORMATS, clamp01, distM, tokenRadius, type FormatId, type Point } from "@/lib/pitch/formats";
 import { defaultSetup, newId, type Situation } from "@/lib/pitch/situation";
 import type { FormState } from "@/lib/form";
 import { deleteSet, saveSet, setPublished } from "@/app/coach/actions";
@@ -83,22 +83,20 @@ export function SetEditor({ teamId, set, initial, answerCounts }: Props) {
     if (setup.pass) arrows.push({ from: setup.ball, to: setup.pass });
     opps(false);
     for (const [l, n] of f.us) {
-      const m = key.model[l];
-      if (m) {
-        zones.push({ pos: m, label: l });
-        arrows.push({ from: setup.start[l], to: m });
-      }
+      // players left where they started are expected to stay put
+      const m = key.model[l] ?? setup.start[l];
+      zones.push({ pos: m, label: l });
+      if (distM(setup.start[l], m, f) > tokenRadius(f) * 0.5) arrows.push({ from: setup.start[l], to: m });
       tokens.push({ id: `ghost:${l}`, pos: setup.start[l], team: "us", num: n, opacity: 0.3 });
     }
     for (const [l, n] of f.us) {
-      tokens.push({ id: `model:${l}`, pos: key.model[l] ?? setup.start[l], team: "us", num: n, label: l, draggable: true, dashed: !key.model[l] });
+      tokens.push({ id: `model:${l}`, pos: key.model[l] ?? setup.start[l], team: "us", num: n, label: l, draggable: true });
     }
     balls.push({ id: "ball-start", pos: setup.ball, possession: setup.possession, opacity: 0.35 });
     if (setup.pass) balls.push({ id: "ball-end", pos: setup.pass, possession: setup.possession });
   }
 
   // ---- actions ----
-  const keyed = f.us.filter(([l]) => key.model[l]).length;
   const answered = answerCounts[s.id] ?? 0;
 
   const save = () =>
@@ -124,7 +122,7 @@ export function SetEditor({ teamId, set, initial, answerCounts }: Props) {
         <p className="mt-2 px-1 text-sm text-muted">
           {layer === "setup"
             ? "Drag the ball, opponents and your players into the starting picture. The faded ball is where the pass goes."
-            : "Drag each player to where they should end up after the ball moves. Inside the dashed circle scores full points."}
+            : "Drag the players who should move to where they should end up. Anyone you don't move is expected to stay where they are (like the goalkeeper). Inside a circle scores full points."}
         </p>
       </div>
 
@@ -185,7 +183,7 @@ export function SetEditor({ teamId, set, initial, answerCounts }: Props) {
             {(["setup", "answer"] as const).map((l, i) => (
               <button key={l} type="button" onClick={() => setLayer(l)}
                 className={`flex-1 border px-3 py-2 ${i ? "rounded-r-lg" : "rounded-l-lg"} ${layer === l ? "border-accent bg-accent text-accent-ink" : "border-line bg-chip"}`}>
-                {l === "setup" ? "1. Setup" : `2. Answer key (${keyed}/${f.us.length})`}
+                {l === "setup" ? "1. Setup" : "2. Answer key"}
               </button>
             ))}
           </div>
@@ -209,11 +207,8 @@ export function SetEditor({ teamId, set, initial, answerCounts }: Props) {
               </Button>
             </>
           ) : (
-            <div className="mt-3 flex flex-wrap gap-2 text-sm">
-              <Button onClick={() => update((x) => ({ ...x, key: { ...x.key, model: Object.fromEntries(f.us.map(([l]) => [l, x.key.model[l] ?? x.setup.start[l]])) } }))}>
-                Rest stay where they are
-              </Button>
-              <Button onClick={() => update((x) => ({ ...x, key: { ...x.key, model: {} } }))}>Clear</Button>
+            <div className="mt-3 text-sm">
+              <Button onClick={() => update((x) => ({ ...x, key: { ...x.key, model: {} } }))}>Reset answer (everyone stays)</Button>
             </div>
           )}
 

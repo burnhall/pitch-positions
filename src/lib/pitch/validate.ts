@@ -44,5 +44,7 @@ export function cleanKey(f: Format, v: unknown): SituationKey {
   return { model: cleanPositions(f, v.model), note: typeof v.note === "string" ? v.note.slice(0, 1000) : "" };
 }
 
-/** Positions with no answer in the key, e.g. ["GK", "ST"]. */
-export const missingFromKey = (f: Format, key: SituationKey) => f.us.map(([l]) => l).filter((l) => !key.model[l]);
+/** The coach doesn't have to move every player: anyone left out of the key should stay where they started. */
+export function completeKey(f: Format, setup: SituationSetup, key: SituationKey): SituationKey {
+  return { ...key, model: Object.fromEntries(f.us.map(([l]) => [l, key.model[l] ?? setup.start[l]])) };
+}

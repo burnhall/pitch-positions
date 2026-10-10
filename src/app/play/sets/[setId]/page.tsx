@@ -5,7 +5,7 @@ import { Loading, PageShell } from "@/components/PageShell";
 import { requirePlayer } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { FORMATS, isFormatId } from "@/lib/pitch/formats";
-import { cleanKey, cleanPositions, cleanSetup } from "@/lib/pitch/validate";
+import { cleanKey, cleanPositions, cleanSetup, completeKey } from "@/lib/pitch/validate";
 import { playerSignOut } from "../../actions";
 import { HomeworkRunner, type Result } from "./HomeworkRunner";
 
@@ -47,11 +47,12 @@ async function Homework({ params }: { params: Promise<{ setId: string }> }) {
   const keyOf = new Map(((keys ?? []) as KeyRow[]).map((k) => [k.situation_id, k]));
 
   const situations = sits.map((s) => {
+    const setup = cleanSetup(f, s.setup);
     const a = answerOf.get(s.id);
     const result: Result | null = a
-      ? { points: a.points, maxPoints: a.max_points, positions: cleanPositions(f, a.positions), key: cleanKey(f, keyOf.get(s.id)) }
+      ? { points: a.points, maxPoints: a.max_points, positions: cleanPositions(f, a.positions), key: completeKey(f, setup, cleanKey(f, keyOf.get(s.id))) }
       : null;
-    return { id: s.id, setup: cleanSetup(f, s.setup), result };
+    return { id: s.id, setup, result };
   });
 
   return (

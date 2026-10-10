@@ -11,7 +11,7 @@ import { requirePlayer } from "@/lib/auth";
 import { FORMATS, isFormatId } from "@/lib/pitch/formats";
 import { scoreSituation } from "@/lib/pitch/scoring";
 import type { SituationKey, TeamPositions } from "@/lib/pitch/situation";
-import { cleanKey, cleanPositions, cleanSetup } from "@/lib/pitch/validate";
+import { cleanKey, cleanPositions, cleanSetup, completeKey } from "@/lib/pitch/validate";
 
 /** A kid opens their invite link and picks a PIN. Creates their login (or resets the PIN) and signs them in. */
 export async function claimInvite(token: string, _: FormState, fd: FormData): Promise<FormState> {
@@ -114,7 +114,8 @@ export async function submitAnswer(situationId: string, positions: unknown): Pro
   const admin = createSupabaseAdminClient();
   const { data: keyRow } = await admin.from("situation_keys").select("model, note").eq("situation_id", situationId).maybeSingle();
   const setup = cleanSetup(f, sit.setup);
-  const key = cleanKey(f, keyRow);
+  // players the coach left out of the key should stay put
+  const key = completeKey(f, setup, cleanKey(f, keyRow));
   const answer = { ...setup.start, ...cleanPositions(f, positions) };
   const score = scoreSituation(f, setup, key, answer);
 
