@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
-import { Pitch, type PitchArrow, type PitchBall, type PitchToken } from "@/components/pitch/Pitch";
+import { Pitch, type PitchArrow, type PitchBall, type PitchToken, type PitchZone } from "@/components/pitch/Pitch";
 import { Button, ButtonLink, Card } from "@/components/ui";
-import { FORMATS, distM, lerp, tokenRadius, type FormatId, type Point } from "@/lib/pitch/formats";
+import { FORMATS, distM, lerp, tokenRadius, type FormatId } from "@/lib/pitch/formats";
 import { pct, scorePlayer } from "@/lib/pitch/scoring";
 import type { SituationKey, SituationSetup, TeamPositions } from "@/lib/pitch/situation";
 import { submitAnswer } from "../../actions";
@@ -77,7 +77,7 @@ export function HomeworkRunner({ set, situations }: Props) {
   const tokens: PitchToken[] = setup.opp.map((pos, i) => ({ id: `opp${i}`, pos, team: "opp" as const }));
   const balls: PitchBall[] = [];
   const arrows: PitchArrow[] = [];
-  const zones: Point[] = [];
+  const zones: PitchZone[] = [];
 
   if (result) {
     if (setup.pass) {
@@ -86,14 +86,17 @@ export function HomeworkRunner({ set, situations }: Props) {
     }
     for (const [l, n] of f.us) {
       const m = result.key.model[l];
-      if (m) zones.push(m);
+      if (m) zones.push({ pos: m, label: l });
       tokens.push({ id: `ghost${l}`, pos: setup.start[l], team: "us", num: n, opacity: 0.22 });
       const a = result.positions[l];
       if (a && distM(setup.start[l], a, f) > tokenRadius(f)) arrows.push({ from: setup.start[l], to: a });
     }
     for (const [l, n] of f.us) {
       const a = result.positions[l] ?? setup.start[l];
-      const r = scorePlayer(f, setup.start[l], result.key.model[l], a);
+      const m = result.key.model[l];
+      const r = scorePlayer(f, setup.start[l], m, a);
+      // a player outside their circle gets a yellow line to where they should have been
+      if (m && r && r.s < 100) arrows.push({ from: a, to: m, miss: true });
       tokens.push({ id: l, pos: a, team: "us", num: n, label: r ? `${l} · ${r.s}` : l });
     }
     balls.push({ id: "ball", pos: setup.pass ?? setup.ball, possession: setup.possession });

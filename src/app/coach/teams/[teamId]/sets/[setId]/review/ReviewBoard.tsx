@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Pitch, type PitchArrow, type PitchBall, type PitchToken } from "@/components/pitch/Pitch";
+import { Pitch, type PitchArrow, type PitchBall, type PitchToken, type PitchZone } from "@/components/pitch/Pitch";
 import { Button, Card, inputClass } from "@/components/ui";
-import { FORMATS, distM, tokenRadius, type FormatId, type Point } from "@/lib/pitch/formats";
+import { FORMATS, distM, tokenRadius, type FormatId } from "@/lib/pitch/formats";
 import { pct, scorePlayer } from "@/lib/pitch/scoring";
 import type { Situation, TeamPositions } from "@/lib/pitch/situation";
 
@@ -40,7 +40,7 @@ export function ReviewBoard({ format, situations, answers }: Props) {
   const tokens: PitchToken[] = setup.opp.map((pos, i) => ({ id: `opp${i}`, pos, team: "opp" as const }));
   const balls: PitchBall[] = [];
   const arrows: PitchArrow[] = [];
-  const zones: Point[] = positions.map(([l]) => key.model[l]).filter((m): m is Point => !!m);
+  const zones: PitchZone[] = positions.filter(([l]) => key.model[l]).map(([l]) => ({ pos: key.model[l], label: l }));
   if (setup.pass) {
     arrows.push({ from: setup.ball, to: setup.pass });
     balls.push({ id: "start", pos: setup.ball, possession: setup.possession, opacity: 0.35 });
@@ -52,6 +52,7 @@ export function ReviewBoard({ format, situations, answers }: Props) {
       const a = focused.positions[l] ?? setup.start[l];
       if (distM(setup.start[l], a, f) > tokenRadius(f)) arrows.push({ from: setup.start[l], to: a });
       const r = scorePlayer(f, setup.start[l], key.model[l], a);
+      if (key.model[l] && r && r.s < 100) arrows.push({ from: a, to: key.model[l], miss: true });
       tokens.push({ id: l, pos: a, team: "us", num: n, label: r ? `${l} · ${r.s}` : l });
     }
   } else {

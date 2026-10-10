@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Pitch, type PitchArrow, type PitchBall, type PitchToken } from "@/components/pitch/Pitch";
+import { Pitch, type PitchArrow, type PitchBall, type PitchToken, type PitchZone } from "@/components/pitch/Pitch";
 import { Button, Card, FormMessage, inputClass } from "@/components/ui";
 import { FORMATS, clamp01, type FormatId, type Point } from "@/lib/pitch/formats";
 import { defaultSetup, newId, type Situation } from "@/lib/pitch/situation";
@@ -70,7 +70,7 @@ export function SetEditor({ teamId, set, initial, answerCounts }: Props) {
   const tokens: PitchToken[] = [];
   const balls: PitchBall[] = [];
   const arrows: PitchArrow[] = [];
-  const zones: Point[] = [];
+  const zones: PitchZone[] = [];
   const opps = (draggable: boolean) => setup.opp.forEach((pos, i) => tokens.push({ id: `opp:${i}`, pos, team: "opp", draggable }));
 
   if (layer === "setup") {
@@ -85,7 +85,7 @@ export function SetEditor({ teamId, set, initial, answerCounts }: Props) {
     for (const [l, n] of f.us) {
       const m = key.model[l];
       if (m) {
-        zones.push(m);
+        zones.push({ pos: m, label: l });
         arrows.push({ from: setup.start[l], to: m });
       }
       tokens.push({ id: `ghost:${l}`, pos: setup.start[l], team: "us", num: n, opacity: 0.3 });

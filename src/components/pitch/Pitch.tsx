@@ -31,15 +31,19 @@ export type PitchBall = {
   opacity?: number;
 };
 
-export type PitchArrow = { from: Point; to: Point; strong?: boolean };
+/** strong: white ball movement; miss: yellow dotted line from a player to the zone they should have reached */
+export type PitchArrow = { from: Point; to: Point; strong?: boolean; miss?: boolean };
+
+/** One of the coach's answer zones, labelled with its position so players can tell them apart. */
+export type PitchZone = { pos: Point; label?: string };
 
 type Props = {
   format: FormatId;
   tokens?: PitchToken[];
   balls?: PitchBall[];
   arrows?: PitchArrow[];
-  /** centres of the coach's answer zones */
-  zones?: Point[];
+  /** the coach's answer zones */
+  zones?: PitchZone[];
   onMove?: (id: string, pos: Point) => void;
   onMoveEnd?: (id: string) => void;
   onTap?: (id: string) => void;
@@ -113,14 +117,31 @@ export function Pitch({ format, tokens = [], balls = [], arrows = [], zones = []
       <PitchMarkings f={f} />
 
       {zones.map((z, i) => {
-        const [x, y] = P(z);
+        const [x, y] = P(z.pos);
+        const zr = zoneRadius(f);
         return (
-          <circle key={`z${i}`} cx={x} cy={y} r={zoneRadius(f)} fill="rgba(250,204,21,.16)" stroke={PITCH_COLORS.zone}
-            strokeWidth={sw} strokeDasharray={`${sw * 3} ${sw * 2}`} pointerEvents="none" />
+          <g key={`z${i}`} pointerEvents="none">
+            <circle cx={x} cy={y} r={zr} fill="rgba(250,204,21,.16)" stroke={PITCH_COLORS.zone}
+              strokeWidth={sw} strokeDasharray={`${sw * 3} ${sw * 2}`} />
+            {/* label inside the bottom of the circle: clear of a player standing in the middle,
+                whose own label sits above them */}
+            {z.label && (
+              <text x={x} y={y + zr * 0.62} textAnchor="middle" dominantBaseline="middle" fontSize={tokenRadius(f) * 0.85} fontWeight={700}
+                fill={PITCH_COLORS.zone} stroke="rgba(0,0,0,.55)" strokeWidth={tokenRadius(f) * 0.14} paintOrder="stroke"
+                fontFamily="system-ui,sans-serif">{z.label}</text>
+            )}
+          </g>
         );
       })}
 
-      {arrows.map((a, i) => {
+      {arrows.filter((a) => a.miss).map((a, i) => {
+        const [x1, y1] = P(a.from);
+        const [x2, y2] = P(a.to);
+        const w = f.W * 0.004;
+        return <line key={`m${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={PITCH_COLORS.zone} strokeWidth={w} strokeDasharray={`${w} ${w * 1.6}`} strokeLinecap="round" pointerEvents="none" />;
+      })}
+
+      {arrows.filter((a) => !a.miss).map((a, i) => {
         const [x1, y1] = P(a.from);
         const [x2, y2] = P(a.to);
         const w = f.W * (a.strong ? 0.007 : 0.005);
